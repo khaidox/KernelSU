@@ -1,3 +1,5 @@
+#include <linux/version.h>
+#include <linux/uaccess.h>
 #include "linux/compiler.h"
 #include "linux/cred.h"
 #include "linux/jump_label.h"
@@ -6,6 +8,13 @@
 #include <asm/syscall.h>
 #include <linux/ptrace.h>
 #include <linux/static_key.h>
+
+/* Ref Patch: ARM64 & Helper Compatibility for Kernel < 5.4
+ * Explanation: Adds untagged_addr fallback, linux/uaccess.h, and (void *)regs cast for Kernel 4.9.
+ */
+#ifndef untagged_addr
+#define untagged_addr(addr) (addr)
+#endif
 
 #include "arch.h"
 #include "klog.h" // IWYU pragma: keep
@@ -51,7 +60,7 @@ static int ksu_handle_init_mark_tracker(const char __user **filename_user)
 long __nocfi ksu_hook_newfstatat(int orig_nr, const struct pt_regs *regs)
 {
     if (!ksu_su_compat_enabled)
-        return ksu_syscall_table[orig_nr](regs);
+        return ksu_syscall_table[orig_nr]((void *)regs);
 
     return ksu_handle_stat_sucompat(orig_nr, (struct pt_regs *)regs);
 }
@@ -59,7 +68,7 @@ long __nocfi ksu_hook_newfstatat(int orig_nr, const struct pt_regs *regs)
 long __nocfi ksu_hook_faccessat(int orig_nr, const struct pt_regs *regs)
 {
     if (!ksu_su_compat_enabled)
-        return ksu_syscall_table[orig_nr](regs);
+        return ksu_syscall_table[orig_nr]((void *)regs);
 
     return ksu_handle_faccessat_sucompat(orig_nr, (struct pt_regs *)regs);
 }
@@ -106,7 +115,7 @@ static long __nocfi ksu_hook_execve_common(int orig_nr, const struct pt_regs *re
         return ret;
     }
 
-    ret = ksu_syscall_table[orig_nr](regs);
+    ret = ksu_syscall_table[orig_nr]((void *)regs);
     ksu_sulog_emit_pending(pending_root_execve, ret, GFP_KERNEL);
     return ret;
 }
@@ -124,7 +133,7 @@ long __nocfi ksu_hook_execveat(int orig_nr, const struct pt_regs *regs)
 long __nocfi ksu_hook_setresuid(int orig_nr, const struct pt_regs *regs)
 {
     uid_t old_uid = current_uid().val;
-    long ret = ksu_syscall_table[orig_nr](regs);
+    long ret = ksu_syscall_table[orig_nr]((void *)regs);
 
     if (ret < 0)
         return ret;
