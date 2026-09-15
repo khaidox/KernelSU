@@ -1,12 +1,30 @@
 #include <linux/version.h>
 #include <linux/fs.h>
 #include <linux/nsproxy.h>
+#include <linux/sched.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 #include <linux/sched/task.h>
+#include <linux/refcount.h>
+#else
+typedef atomic_t refcount_t;
+#endif
 #include <linux/uaccess.h>
 #include <linux/filter.h>
 #include <linux/seccomp.h>
+#include <asm/unistd.h>
 #include "klog.h" // IWYU pragma: keep
 #include "infra/seccomp_cache.h"
+
+/* Ref Patch: refcount_t and SECCOMP_ARCH_NATIVE_NR Fallbacks for Kernel < 4.11
+ * Explanation: refcount_t (introduced 4.11) and SECCOMP_ARCH_NATIVE_NR are fallback defined for Kernel 4.9.
+ */
+#ifndef SECCOMP_ARCH_NATIVE_NR
+#ifdef __NR_syscalls
+#define SECCOMP_ARCH_NATIVE_NR __NR_syscalls
+#else
+#define SECCOMP_ARCH_NATIVE_NR 500
+#endif
+#endif
 
 struct action_cache {
     DECLARE_BITMAP(allow_native, SECCOMP_ARCH_NATIVE_NR);
