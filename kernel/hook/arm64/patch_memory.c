@@ -7,12 +7,27 @@
 
 #include "../patch_memory.h"
 #include "klog.h" // IWYU pragma: keep
+#include <linux/version.h>
+#include <asm/pgtable.h>
 #include "linux/cpumask.h"
 #include "linux/gfp.h" // IWYU pragma: keep
 #include "linux/uaccess.h"
 #include "linux/stop_machine.h"
 #include "asm/cacheflush.h"
 #include "asm-generic/fixmap.h"
+
+/* Ref Patch: ARM64 MMU Page Table Walking for Kernel < 4.12/5.8
+ * Explanation: Guards 5-level paging (p4d_t), __pte_to_phys fallback, probe_kernel_write (< 5.8), flush_icache_range (< 5.8).
+ */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
+#ifndef copy_to_kernel_nofault
+#define copy_to_kernel_nofault probe_kernel_write
+#endif
+#endif
+
+#ifndef __pte_to_phys
+#define __pte_to_phys(pte) (pte_pfn(pte) << PAGE_SHIFT)
+#endif
 
 // https://github.com/fuqiuluo/ovo/blob/f7da411458e87d32438dc14fce5a3313ed0c967e/ovo/mmuhack.c#L21
 
@@ -24,7 +39,9 @@ unsigned long phys_from_virt(unsigned long addr, int *err)
 {
     struct mm_struct *mm = &init_mm;
     pgd_t *pgd;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
     p4d_t *p4d;
+#endif
     pud_t *pud;
     pmd_t *pmd;
     pte_t *pte;
@@ -36,6 +53,7 @@ unsigned long phys_from_virt(unsigned long addr, int *err)
         goto fail;
     pr_debug("pgd of 0x%lx p=0x%lx v=0x%lx", addr, (uintptr_t)pgd, (uintptr_t)pgd_val(*pgd));
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
     p4d = p4d_offset(pgd, addr);
     if (p4d_none(*p4d) || p4d_bad(*p4d))
         goto fail;
@@ -48,6 +66,9 @@ unsigned long phys_from_virt(unsigned long addr, int *err)
 #endif
 
     pud = pud_offset(p4d, addr);
+#else
+    pud = pud_offset(pgd, addr);
+#endif
     if (pud_none(*pud) || pud_bad(*pud))
         goto fail;
     pr_debug("pud of 0x%lx p=0x%lx v=0x%lx", addr, (uintptr_t)pud, (uintptr_t)pud_val(*pud));
@@ -99,7 +120,11 @@ fail:
 #define ksu_flush_icache(start, end) caches_clean_inval_pou
 #else
 #define ksu_flush_dcache(start, sz) __flush_dcache_area((void *)start, sz)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
 #define ksu_flush_icache(start, end) __flush_icache_range
+#else
+#define ksu_flush_icache(start, end) flush_icache_range
+#endif
 #endif
 
 struct patch_text_info {
