@@ -4,8 +4,10 @@
 #include <linux/capability.h>
 #include <linux/cred.h>
 #include <linux/sched.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 #include <linux/sched/user.h>
 #include <linux/sched/signal.h>
+#endif
 #include <linux/seccomp.h>
 #include <linux/slab.h>
 #include <linux/thread_info.h>
@@ -101,7 +103,12 @@ static void disable_seccomp(void)
 
     current->seccomp.mode = 0;
     current->seccomp.filter = NULL;
+/* Ref Patch: Guard filter_count for Kernel < 5.9
+ * Explanation: filter_count field in struct seccomp was introduced in Linux Kernel 5.9.
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
     atomic_set(&current->seccomp.filter_count, 0);
+#endif
     spin_unlock_irq(&current->sighand->siglock);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
