@@ -102,7 +102,11 @@ int ksu_lsm_hook(struct ksu_lsm_hook *hook)
     size_t i;
 #else
     unsigned long heads_addr;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
+    struct list_head *head;
+#else
     struct hlist_head *head;
+#endif
     struct security_hook_list *selected_entry = NULL;
     void **selected_slot = NULL;
     void *selected_origin = NULL;
@@ -288,13 +292,25 @@ int ksu_lsm_hook(struct ksu_lsm_hook *hook)
         pr_warn("lookup head size failed");
     }
 
+/* Ref Patch: LSM security_hook_heads list_head compatibility for Kernel < 4.17
+ * Explanation: Linux < 4.17 uses struct list_head for security_hook_heads instead of struct hlist_head.
+ */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
+    head = (struct list_head *)heads_addr;
+    struct list_head *head_end = (struct list_head *)(heads_addr + heads_size);
+#else
     head = (struct hlist_head *)heads_addr;
     struct hlist_head *head_end = (struct hlist_head *)(heads_addr + heads_size);
+#endif
     pr_info("heads_addr 0x%lx head_offset 0x%lx heads_size %ld hook_offset 0x%lx\n", (unsigned long)heads_addr,
             hook->head_offset, heads_size, hook->hook_offset);
 
     for (; head < head_end; head++) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
+        list_for_each_entry (entry, head, list) {
+#else
         hlist_for_each_entry (entry, head, list) {
+#endif
             void **slot = (void **)((char *)entry + hook->hook_offset);
             void *current_origin = READ_ONCE(*slot);
             int j;
@@ -320,13 +336,17 @@ int ksu_lsm_hook(struct ksu_lsm_hook *hook)
         if (selected_entry) {
             if (hook->offset) {
                 head += hook->offset;
-                if (head < (struct hlist_head *)heads_addr || head >= head_end) {
+                if (head < (typeof(head))heads_addr || head >= head_end) {
                     pr_err("invalid offset\n");
                     ret = -EINVAL;
                     goto out_unlock;
                 }
                 // just check if already hooked
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
+                list_for_each_entry (entry, head, list) {
+#else
                 hlist_for_each_entry (entry, head, list) {
+#endif
                     void **slot = (void **)((char *)entry + hook->hook_offset);
                     void *current_origin = READ_ONCE(*slot);
                     if (current_origin == hook->replacement) {
@@ -334,6 +354,20 @@ int ksu_lsm_hook(struct ksu_lsm_hook *hook)
                         goto out_unlock;
                     }
                 }
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
+                if (!list_empty(head)) {
+                    selected_entry = list_entry(head->next, struct security_hook_list, list);
+                    selected_slot = (void **)((char *)selected_entry + hook->hook_offset);
+                    selected_origin = *selected_slot;
+                } else {
+                    selected_entry = &hook->list;
+                    hook->list.head = head;
+                    INIT_LIST_HEAD(&hook->list.list);
+                    *(void **)((char *)selected_entry + hook->hook_offset) = hook->replacement;
+                    selected_slot = (void **)&head->next;
+                    selected_origin = NULL;
+                }
+#else
                 if (head->first) {
                     selected_entry = hlist_entry(head->first, struct security_hook_list, list);
                     selected_slot = (void **)((char *)selected_entry + hook->hook_offset);
@@ -348,6 +382,7 @@ int ksu_lsm_hook(struct ksu_lsm_hook *hook)
                     selected_slot = (void **)&head->first;
                     selected_origin = NULL;
                 }
+#endif
             }
             break;
         }
@@ -407,7 +442,15 @@ void ksu_lsm_unhook(struct ksu_lsm_hook *hook)
         return;
     }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
+    if (hook->entry == &hook->list) {
+        slot = (void **)&hook->list.head->next;
+        pr_info("unhook patch head->next\n");
+    } else {
+        slot = (void **)((char *)hook->entry + hook->hook_offset);
+        pr_info("unhook patch slot\n");
+    }
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
     slot = (void **)((char *)hook->entry + hook->hook_offset);
 #else
     if (hook->entry == &hook->list) {
