@@ -27,7 +27,19 @@
 #include "hook/patch_memory.h"
 #include "ksu.h"
 #include "policy/feature.h"
-#include "hook/lsm_hook.h"
+#include <linux/version.h>
+
+/* Ref Patch: Guard SELinux hide feature for Kernel < 5.14
+ * Explanation: selinux_state and backup_sepolicy dynamic policy reloading are introduced in Kernel 5.14+.
+ * Error Fix: error: use of undeclared identifier 'selinux_state'
+ */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
+void __init ksu_selinux_hide_init(void) {}
+void __exit ksu_selinux_hide_exit(void) {}
+void ksu_selinux_hide_drop_backup_if_unused(void) {}
+void ksu_selinux_hide_handle_second_stage(void) {}
+void ksu_selinux_hide_handle_post_fs_data(void) {}
+#else
 
 static DEFINE_MUTEX(selinux_hide_mutex);
 static bool ksu_selinux_hide_enabled __read_mostly = false;
@@ -1143,4 +1155,5 @@ allow:
     avd->allowed = 0xffffffff;
     goto out;
 }
+#endif
 #endif
