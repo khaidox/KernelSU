@@ -15,25 +15,30 @@
 #include "linux/lsm_audit.h" // IWYU pragma: keep
 #include "xfrm.h"
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
 struct selinux_policy *backup_sepolicy;
+#endif
 
 #define SELINUX_POLICY_INSTEAD_SELINUX_SS
 
 #define ALL NULL
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0))
+/* Ref Patch: Guard dynamic selinux_policy rules for Kernel < 5.14
+ * Explanation: selinux_state and struct selinux_policy live policy reloading were introduced in Linux Kernel 5.14+.
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
 extern int avc_ss_reset(u32 seqno);
-#else
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
 extern int avc_ss_reset(struct selinux_avc *avc, u32 seqno);
 #endif
-// reset avc cache table, otherwise the new rules will not take effect if already denied
+
 static void reset_avc_cache()
 {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0))
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
     avc_ss_reset(0);
     selnl_notify_policyload(0);
     selinux_status_update_policyload(0);
-#else
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
     struct selinux_avc *avc = selinux_state.avc;
     avc_ss_reset(avc, 0);
     selnl_notify_policyload(0);
@@ -44,6 +49,7 @@ static void reset_avc_cache()
 
 void apply_kernelsu_rules()
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
     struct selinux_policy *pol, *old_pol = selinux_state.policy;
     struct policydb *db;
 
@@ -162,6 +168,9 @@ void apply_kernelsu_rules()
     reset_avc_cache();
 out_unlock:
     mutex_unlock(&selinux_state.policy_mutex);
+#else
+    pr_info("Kernel < 5.14: apply_kernelsu_rules not supported\n");
+#endif
 }
 
 #define KSU_SEPOLICY_MAX_BATCH_SIZE (8U * 1024U * 1024U)
@@ -431,6 +440,7 @@ static int apply_one_sepolicy_cmd(struct policydb *db, const struct sepol_data *
 
 int handle_sepolicy(void __user *user_data, u64 data_len)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
     struct selinux_policy *pol, *old_pol;
     struct policydb *db;
     struct sepol_batch_cursor cursor;
@@ -530,4 +540,8 @@ out_free:
     kvfree(payload);
 
     return ret;
+#else
+    pr_info("Kernel < 5.14: handle_sepolicy not supported\n");
+    return -EINVAL;
+#endif
 }

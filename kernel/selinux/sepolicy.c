@@ -14,6 +14,7 @@
 #include "klog.h" // IWYU pragma: keep
 #include "ss/symtab.h"
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
 #define KSU_SUPPORT_ADD_TYPE
 
 //////////////////////////////////////////////////////
@@ -894,6 +895,7 @@ bool ksu_genfscon(struct policydb *db, const char *fs_name, const char *path, co
 
 // ======== sepolicy ========
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
 void ksu_destroy_sepolicy(struct selinux_policy *pol)
 {
     policydb_destroy(&pol->policydb);
@@ -974,3 +976,5 @@ out_free_data:
 
     return ERR_PTR(ret);
 }
+#endif
+#endif
