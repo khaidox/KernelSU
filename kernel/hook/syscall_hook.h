@@ -2,8 +2,14 @@
 #define __KSU_H_KSU_SYSCALL_HOOK
 #include <asm/syscall.h>
 
+/* Ref Patch: Kernel 4.9 ARM64 compatibility for KernelSU 
+ * Source Ref: SakuraKyuo/android_kernel_xiaomi_sdm710 (Commit: 5928c4e440a1ea4ac92573ba5f4d3823a8d8d098)
+ * KernelSU Ref: tiann/KernelSU (Commit: 932014ab5b2c9b74a3d11e2ec4d17dd10fc9442e)
+ */
 #if defined(__x86_64__)
 typedef sys_call_ptr_t syscall_fn_t;
+#else
+typedef long (*syscall_fn_t)(void *);
 #endif
 
 extern syscall_fn_t *ksu_syscall_table;
