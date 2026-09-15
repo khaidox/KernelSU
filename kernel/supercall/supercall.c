@@ -17,6 +17,14 @@
 #include "util.h"
 #include "klog.h" // IWYU pragma: keep
 
+/* Ref Patch: Add TWA_RESUME fallback macro for task_work_add on Kernel < 5.7
+ * Source Ref: tiann/KernelSU@932014ab5b2c9b74a3d11e2ec4d17dd10fc9442e
+ * Error Fix: error: use of undeclared identifier 'TWA_RESUME'
+ */
+#ifndef TWA_RESUME
+#define TWA_RESUME true
+#endif
+
 struct ksu_install_fd_tw {
     struct callback_head cb;
     int __user *outp;
