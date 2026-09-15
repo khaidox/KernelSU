@@ -2,9 +2,16 @@
 #include <linux/compat.h>
 #include <linux/cred.h>
 #include <linux/gfp.h>
+#include <linux/kernel.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 #include <linux/minmax.h>
+#endif
 #include <linux/overflow.h>
+#include <linux/sched.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 #include <linux/sched/signal.h>
+#endif
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/uaccess.h>
@@ -18,6 +25,17 @@
 #include "infra/event_queue.h"
 #include "klog.h" // IWYU pragma: keep
 #include "sulog/event.h"
+
+/* Ref Patch: Add strncpy_from_user_nofault and untagged_addr fallbacks for Kernel < 5.8
+ * Source Ref: tiann/KernelSU@932014ab5b2c9b74a3d11e2ec4d17dd10fc9442e
+ * Error Fix: error: implicit declaration of function 'strncpy_from_user_nofault'
+ */
+#ifndef strncpy_from_user_nofault
+#define strncpy_from_user_nofault(dst, src, count) strncpy_from_user(dst, src, count)
+#endif
+#ifndef untagged_addr
+#define untagged_addr(addr) (addr)
+#endif
 
 #define KSU_SULOG_MAX_QUEUED 256U
 #define KSU_SULOG_MAX_PAYLOAD_LEN 2048U
