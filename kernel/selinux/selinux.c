@@ -1,10 +1,44 @@
 #include "selinux.h"
 #include "linux/cred.h"
 #include "linux/sched.h"
-#include "objsec.h"
 #include "linux/version.h"
+#include "objsec.h"
+#include "avc.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
+
+/* Ref Patch: SELinux helper fallbacks for Kernel < 4.17/5.10
+ * Explanation: selinux_cred, selinux_enforcing, security_context_to_sid, security_sid_to_context for Kernel 4.9.
+ */
+#ifndef selinux_cred
+#define selinux_cred(cred) ((struct task_security_struct *)(cred)->security)
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)
+#ifndef security_secctx_to_secid
+static inline int ksu_security_secctx_to_secid(const char *secdata, u32 scontext_len, u32 *secid)
+{
+    return security_context_to_sid(secdata, scontext_len, secid, GFP_KERNEL);
+}
+#define security_secctx_to_secid ksu_security_secctx_to_secid
+#endif
+
+#ifndef security_secid_to_secctx
+static inline int ksu_security_secid_to_secctx(u32 secid, char **secdata, u32 *scontext_len)
+{
+    return security_sid_to_context(secid, secdata, scontext_len);
+}
+#define security_secid_to_secctx ksu_security_secid_to_secctx
+#endif
+
+#ifndef security_release_secctx
+static inline void ksu_security_release_secctx(char *secdata, u32 scontext_len)
+{
+    kfree(secdata);
+}
+#define security_release_secctx ksu_security_release_secctx
+#endif
+#endif
 
 /*
  * Cached SID values for frequently checked contexts.
@@ -71,20 +105,34 @@ void setup_ksu_cred(void)
 void setenforce(bool enforce)
 {
 #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
     selinux_state.enforcing = enforce;
+#else
+    selinux_enforcing = enforce ? 1 : 0;
+#endif
 #endif
 }
 
 bool getenforce(void)
 {
 #ifdef CONFIG_SECURITY_SELINUX_DISABLE
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
     if (selinux_state.disabled) {
         return false;
     }
+#else
+    if (!selinux_enabled) {
+        return false;
+    }
+#endif
 #endif
 
 #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
     return selinux_state.enforcing;
+#else
+    return selinux_enforcing;
+#endif
 #else
     return true;
 #endif
