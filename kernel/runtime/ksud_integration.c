@@ -10,6 +10,7 @@
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/version.h>
+#include <linux/vmalloc.h>
 #include <linux/input-event-codes.h>
 #include <linux/kprobes.h>
 #include <linux/printk.h>
@@ -19,6 +20,31 @@
 #include <linux/workqueue.h>
 #include <linux/uio.h>
 #include <linux/stat.h>
+
+/* Ref Patch: Kernel 4.9 helper fallbacks for ksud_integration.c
+ * Explanation: strncpy_from_user_nofault (< 5.8), copy_from_user_nofault (< 5.8), kvmalloc (< 4.12) fallbacks for Kernel 4.9.
+ */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
+#ifndef strncpy_from_user_nofault
+#define strncpy_from_user_nofault(dst, src, count) strncpy_from_user(dst, src, count)
+#endif
+#ifndef copy_from_user_nofault
+#define copy_from_user_nofault(dst, src, size) copy_from_user(dst, src, size)
+#endif
+#ifndef copy_to_user_nofault
+#define copy_to_user_nofault(dst, src, size) copy_to_user(dst, src, size)
+#endif
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0)
+static inline void *kvmalloc(size_t size, gfp_t flags)
+{
+    void *p = kmalloc(size, flags | __GFP_NOWARN);
+    if (!p)
+        p = vmalloc(size);
+    return p;
+}
+#endif
 
 #include "arch.h"
 #include "klog.h" // IWYU pragma: keep
@@ -651,8 +677,8 @@ void __init ksu_ksud_init()
 {
     int ret;
 
-    ksu_syscall_table_hook(__NR_read, ksu_sys_read, &orig_sys_read);
-    ksu_syscall_table_hook(__NR_fstat, ksu_sys_fstat, &orig_sys_fstat);
+    ksu_syscall_table_hook(__NR_read, (syscall_fn_t)ksu_sys_read, (syscall_fn_t *)&orig_sys_read);
+    ksu_syscall_table_hook(__NR_fstat, (syscall_fn_t)ksu_sys_fstat, (syscall_fn_t *)&orig_sys_fstat);
 
     ret = register_kprobe(&input_event_kp);
     pr_info("ksud: input_event_kp: %d\n", ret);
