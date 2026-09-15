@@ -7,11 +7,23 @@
 #include <linux/err.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/module.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/version.h>
 #include <linux/mount.h>
+
+/* Ref Patch: VFS file_operations & alloc_file_pseudo Compatibility for Kernel < 4.19/5.0/5.11
+ * Explanation: Guards modern file_operations fields, adds alloc_file_pseudo fallback for < 4.19, selinux_inode macro, and linux/module.h include.
+ */
+#ifndef __poll_t
+typedef unsigned int __poll_t;
+#endif
+
+#ifndef selinux_inode
+#define selinux_inode(inode) ((struct inode_security_struct *)(inode)->i_security)
+#endif
 
 #include "objsec.h"
 
@@ -92,7 +104,7 @@ static int ksu_wrapper_iopoll(struct kiocb *kiocb, struct io_comp_batch *icb, un
     kiocb->ki_filp = orig;
     return orig->f_op->iopoll(kiocb, icb, v);
 }
-#else
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
 static int ksu_wrapper_iopoll(struct kiocb *kiocb, bool spin)
 {
     struct ksu_file_wrapper *data = kiocb->ki_filp->private_data;
@@ -307,6 +319,7 @@ static ssize_t ksu_wrapper_copy_file_range(struct file *file_in, loff_t pos_in, 
 // https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/remap_range.c;l=403-404;drc=398da7defe218d3e51b0f3bdff75147e28125b60
 // REMAP_FILE_DEDUP: use file_out
 // https://cs.android.com/android/kernel/superproject/+/common-android-mainline:common/fs/remap_range.c;l=483-484;drc=398da7defe218d3e51b0f3bdff75147e28125b60
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
 static loff_t ksu_wrapper_remap_file_range(struct file *file_in, loff_t pos_in, struct file *file_out, loff_t pos_out,
                                            loff_t len, unsigned int remap_flags)
 {
@@ -320,7 +333,9 @@ static loff_t ksu_wrapper_remap_file_range(struct file *file_in, loff_t pos_in, 
         return orig->f_op->remap_file_range(orig, pos_in, file_out, pos_out, len, remap_flags);
     }
 }
+#endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
 static int ksu_wrapper_fadvise(struct file *fp, loff_t off1, loff_t off2, int flags)
 {
     struct ksu_file_wrapper *data = fp->private_data;
@@ -330,6 +345,7 @@ static int ksu_wrapper_fadvise(struct file *fp, loff_t off1, loff_t off2, int fl
     }
     return -EINVAL;
 }
+#endif
 
 static void ksu_release_file_wrapper(struct ksu_file_wrapper *data);
 
@@ -360,7 +376,9 @@ static struct ksu_file_wrapper *ksu_create_file_wrapper(struct file *fp)
     p->ops.write = fp->f_op->write ? ksu_wrapper_write : NULL;
     p->ops.read_iter = fp->f_op->read_iter ? ksu_wrapper_read_iter : NULL;
     p->ops.write_iter = fp->f_op->write_iter ? ksu_wrapper_write_iter : NULL;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
     p->ops.iopoll = fp->f_op->iopoll ? ksu_wrapper_iopoll : NULL;
+#endif
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
     p->ops.iterate = fp->f_op->iterate ? ksu_wrapper_iterate : NULL;
 #endif
@@ -371,7 +389,7 @@ static struct ksu_file_wrapper *ksu_create_file_wrapper(struct file *fp)
     p->ops.mmap = fp->f_op->mmap ? ksu_wrapper_mmap : NULL;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
     p->ops.fop_flags = fp->f_op->fop_flags;
-#else
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
     p->ops.mmap_supported_flags = fp->f_op->mmap_supported_flags;
 #endif
     p->ops.flush = fp->f_op->flush ? ksu_wrapper_flush : NULL;
@@ -391,8 +409,12 @@ static struct ksu_file_wrapper *ksu_create_file_wrapper(struct file *fp)
     p->ops.fallocate = fp->f_op->fallocate ? ksu_wrapper_fallocate : NULL;
     p->ops.show_fdinfo = fp->f_op->show_fdinfo ? ksu_wrapper_show_fdinfo : NULL;
     p->ops.copy_file_range = fp->f_op->copy_file_range ? ksu_wrapper_copy_file_range : NULL;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
     p->ops.remap_file_range = fp->f_op->remap_file_range ? ksu_wrapper_remap_file_range : NULL;
+#endif
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
     p->ops.fadvise = fp->f_op->fadvise ? ksu_wrapper_fadvise : NULL;
+#endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
     p->ops.splice_eof = fp->f_op->splice_eof ? ksu_wrapper_splice_eof : NULL;
@@ -434,11 +456,34 @@ static const struct dentry_operations ksu_file_wrapper_d_ops = { .d_dname = ksu_
 // Borrow kernel's anon_inode_mnt, so that we don't need to mount one by ourselves.
 static struct vfsmount *anon_inode_mnt __read_mostly;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0)
+static struct file *alloc_file_pseudo(struct inode *inode, struct vfsmount *mnt,
+				      const char *name, int flags,
+				      const struct file_operations *fops)
+{
+	struct qstr this = QSTR_INIT(name, strlen(name));
+	struct path path;
+	struct file *file;
+
+	path.dentry = d_alloc_pseudo(mnt->mnt_sb, &this);
+	if (!path.dentry)
+		return ERR_PTR(-ENOMEM);
+	path.mnt = mntget(mnt);
+
+	d_instantiate(path.dentry, inode);
+	file = alloc_file(&path, OPEN_FMODE(flags), fops);
+	if (IS_ERR(file)) {
+		path_put(&path);
+		return file;
+	}
+	file->f_flags = flags;
+	return file;
+}
+#endif
+
 static struct inode *ksu_anon_inode_make_secure_inode(const char *name, const struct inode *context_inode)
 {
     struct inode *inode;
-    const struct qstr qname = QSTR_INIT(name, strlen(name));
-    int error;
 
     if (unlikely(!anon_inode_mnt)) {
         return ERR_PTR(-ENODEV);
@@ -448,11 +493,14 @@ static struct inode *ksu_anon_inode_make_secure_inode(const char *name, const st
     if (IS_ERR(inode))
         return inode;
     inode->i_flags &= ~S_PRIVATE;
-    error = security_inode_init_security_anon(inode, &qname, context_inode);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
+    const struct qstr qname = QSTR_INIT(name, strlen(name));
+    int error = security_inode_init_security_anon(inode, &qname, context_inode);
     if (error) {
         iput(inode);
         return ERR_PTR(error);
     }
+#endif
     return inode;
 }
 
