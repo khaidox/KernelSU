@@ -1,7 +1,11 @@
 #ifndef __KSU_H_SULOG_EVENT
 #define __KSU_H_SULOG_EVENT
 
+#include <linux/version.h>
+#include <linux/compiler.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
 #include <linux/compiler_types.h>
+#endif
 #include <linux/gfp.h>
 #include <linux/types.h>
 #include "uapi/sulog.h" // IWYU pragma: keep

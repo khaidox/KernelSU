@@ -1,5 +1,11 @@
-#include <linux/cache.h>
+#include <linux/version.h>
+#include <linux/compiler.h>
+/* Ref Patch: Guard linux/compiler_types.h for Kernel < 4.19
+ * Explanation: linux/compiler_types.h was introduced in Linux 4.19+. Guarding it prevents header missing errors on Kernel 4.9.
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
 #include <linux/compiler_types.h>
+#endif
 
 #include "feature/sulog.h"
 #include "klog.h" // IWYU pragma: keep

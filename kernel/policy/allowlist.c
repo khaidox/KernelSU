@@ -13,8 +13,43 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/version.h>
+#include <linux/compiler.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
 #include <linux/compiler_types.h>
+#endif
 #include <linux/hashtable.h>
+
+/* Ref Patch: Kernel 4.9 VFS kernel_read/write & task_work fallbacks
+ * Explanation: kernel_read/write signatures (Kernel < 4.14), TWA_RESUME (Kernel < 5.7), and fallthrough macro (Kernel < 5.7) fallbacks for Kernel 4.9.
+ */
+#ifndef fallthrough
+#define fallthrough do {} while (0)
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0)
+#ifndef TWA_RESUME
+#define TWA_RESUME true
+#endif
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
+static inline ssize_t ksu_kernel_write(struct file *file, const void *buf, size_t count, loff_t *pos)
+{
+    ssize_t res = kernel_write(file, (const char *)buf, count, *pos);
+    if (res > 0)
+        *pos += res;
+    return res;
+}
+static inline ssize_t ksu_kernel_read(struct file *file, void *buf, size_t count, loff_t *pos)
+{
+    ssize_t res = kernel_read(file, *pos, (char *)buf, count);
+    if (res > 0)
+        *pos += res;
+    return res;
+}
+#define kernel_write ksu_kernel_write
+#define kernel_read ksu_kernel_read
+#endif
 #include <linux/kref.h>
 
 #include "klog.h" // IWYU pragma: keep

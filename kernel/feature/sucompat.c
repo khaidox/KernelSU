@@ -1,19 +1,45 @@
 #include "linux/file.h"
 #include "linux/fcntl.h"
-#include "linux/namei.h"
+#include <linux/version.h>
+#include <linux/compiler.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
 #include <linux/compiler_types.h>
+#endif
 #include <linux/preempt.h>
 #include <linux/printk.h>
 #include <linux/mm.h>
+/* Ref Patch: Kernel 4.9 API compatibility backports
+ * Explanation: Fallback to asm/pgtable.h (< 5.8), linux/sched.h (< 4.11), strncpy_from_user (< 5.8), sys_close (< 4.17).
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
 #include <linux/pgtable.h>
+#else
+#include <asm/pgtable.h>
+#endif
 #include <linux/uaccess.h>
 #include <asm/current.h>
 #include <linux/cred.h>
 #include <linux/fs.h>
 #include <linux/types.h>
-#include <linux/version.h>
+#include <linux/sched.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 #include <linux/sched/task_stack.h>
+#endif
+#include <linux/namei.h>
 #include <linux/ptrace.h>
+
+/* Ref Patch: Kernel 4.9 compatibility wrappers for KernelSU 
+ * Source Ref: SakuraKyuo/android_kernel_xiaomi_sdm710 (Commit: 5928c4e440a1ea4ac92573ba5f4d3823a8d8d098)
+ * KernelSU Ref: tiann/KernelSU (Commit: 932014ab5b2c9b74a3d11e2ec4d17dd10fc9442e)
+ */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
+#define strncpy_from_user_nofault strncpy_from_user
+#endif
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
+extern long sys_close(unsigned int fd);
+#define ksys_close sys_close
+#endif
 
 #include "arch.h"
 #include "policy/allowlist.h"
