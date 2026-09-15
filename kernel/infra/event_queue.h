@@ -8,7 +8,28 @@
 #include <linux/poll.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
+#include <linux/version.h>
 #include <linux/wait.h>
+
+/* Ref Patch: Guard __poll_t and EPOLL* constants for Kernel < 4.18
+ * Explanation: __poll_t and EPOLL* alias macros were introduced in Linux 4.18+.
+ */
+#ifndef __poll_t
+typedef unsigned int __poll_t;
+#endif
+
+#ifndef EPOLLIN
+#define EPOLLIN POLLIN
+#endif
+#ifndef EPOLLRDNORM
+#define EPOLLRDNORM POLLRDNORM
+#endif
+#ifndef EPOLLHUP
+#define EPOLLHUP POLLHUP
+#endif
+#ifndef EPOLLERR
+#define EPOLLERR POLLERR
+#endif
 
 #define KSU_EVENT_RECORD_FLAG_INTERNAL (1U << 0)
 #define KSU_EVENT_QUEUE_TYPE_DROPPED ((__u16)0xFFFF)
