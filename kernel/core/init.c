@@ -226,8 +226,14 @@ module_exit(kernelsu_exit);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("weishu");
 MODULE_DESCRIPTION("Android KernelSU");
+/* Ref Patch: Guard MODULE_IMPORT_NS for Kernel < 5.4.0
+ * Source Ref: SakuraKyuo/android_kernel_xiaomi_sdm710 (Commit: 5928c4e440a1ea4ac92573ba5f4d3823a8d8d098)
+ * KernelSU Ref: tiann/KernelSU (Commit: 932014ab5b2c9b74a3d11e2ec4d17dd10fc9442e)
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0)
 MODULE_IMPORT_NS("VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver");
 #else
 MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
+#endif
 #endif
