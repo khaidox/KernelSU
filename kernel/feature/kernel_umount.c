@@ -64,6 +64,7 @@ static const struct ksu_feature_handler webview_zygote_umount_handler = {
     .set_handler = webview_zygote_umount_feature_set,
 };
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)
 extern int path_umount(struct path *path, int flags);
 
 static void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
@@ -73,6 +74,17 @@ static void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
         pr_info("umount %s failed: %d\n", mnt, err);
     }
 }
+#else
+extern long sys_umount(char __user *name, int flags);
+
+static void ksu_umount_mnt(const char *mnt, struct path *path, int flags)
+{
+    int err = sys_umount((char __user *)mnt, flags);
+    if (err) {
+        pr_info("umount %s failed: %d\n", mnt, err);
+    }
+}
+#endif
 
 static void try_umount(const char *mnt, int flags)
 {

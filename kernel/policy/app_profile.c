@@ -66,7 +66,11 @@ void setup_groups(struct root_profile *profile, struct cred *cred)
     put_group_info(group_info);
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
+#define seccomp_filter_release(tsk) put_seccomp_filter(tsk)
+#else
 void seccomp_filter_release(struct task_struct *tsk);
+#endif
 
 // https://cs.android.com/android/_/android/kernel/common/+/5346453405bf12d7ed6003f45dd47b71744fe1be
 // Some 15-6.6 kernel have this backport while others don't have, e.g. Pixel 10
