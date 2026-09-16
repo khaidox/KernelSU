@@ -34,11 +34,21 @@
  * Error Fix: error: use of undeclared identifier 'selinux_state'
  */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 14, 0)
-void __init ksu_selinux_hide_init(void) {}
-void __exit ksu_selinux_hide_exit(void) {}
-void ksu_selinux_hide_drop_backup_if_unused(void) {}
-void ksu_selinux_hide_handle_second_stage(void) {}
-void ksu_selinux_hide_handle_post_fs_data(void) {}
+void __init ksu_selinux_hide_init(void)
+{
+}
+void __exit ksu_selinux_hide_exit(void)
+{
+}
+void ksu_selinux_hide_drop_backup_if_unused(void)
+{
+}
+void ksu_selinux_hide_handle_second_stage(void)
+{
+}
+void ksu_selinux_hide_handle_post_fs_data(void)
+{
+}
 #else
 
 static DEFINE_MUTEX(selinux_hide_mutex);

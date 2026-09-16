@@ -453,13 +453,13 @@ void ksu_lsm_unhook(struct ksu_lsm_hook *hook)
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
     slot = (void **)((char *)hook->entry + hook->hook_offset);
 #else
-    if (hook->entry == &hook->list) {
-        slot = (void **)&hook->list.head->first;
-        pr_info("unhook patch head->first\n");
-    } else {
-        slot = (void **)((char *)hook->entry + hook->hook_offset);
-        pr_info("unhook patch slot\n");
-    }
+if (hook->entry == &hook->list) {
+    slot = (void **)&hook->list.head->first;
+    pr_info("unhook patch head->first\n");
+} else {
+    slot = (void **)((char *)hook->entry + hook->hook_offset);
+    pr_info("unhook patch slot\n");
+}
 #endif
     if (ksu_lsm_hook_patch_slot(slot, hook->original)) {
         pr_err("lsm_hook: failed to restore %s\n", hook->head_name ?: "unknown");

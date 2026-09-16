@@ -25,12 +25,9 @@ static struct fsnotify_group *g;
  * Explanation: Adapt fsnotify_ops, fsnotify_init_mark and fsnotify_add_mark for Kernel 4.9.
  */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
-static int ksu_handle_event(struct fsnotify_group *group,
-			    struct inode *inode,
-			    struct fsnotify_mark *inode_mark,
-			    struct fsnotify_mark *vfsmount_mark,
-			    u32 mask, void *data, int data_type,
-			    const unsigned char *file_name, u32 cookie)
+static int ksu_handle_event(struct fsnotify_group *group, struct inode *inode, struct fsnotify_mark *inode_mark,
+                            struct fsnotify_mark *vfsmount_mark, u32 mask, void *data, int data_type,
+                            const unsigned char *file_name, u32 cookie)
 {
     if (!file_name)
         return 0;

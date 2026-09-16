@@ -23,7 +23,9 @@
  * Explanation: kernel_read/write signatures (Kernel < 4.14), TWA_RESUME (Kernel < 5.7), and fallthrough macro (Kernel < 5.7) fallbacks for Kernel 4.9.
  */
 #ifndef fallthrough
-#define fallthrough do {} while (0)
+#define fallthrough                                                                                                    \
+    do {                                                                                                               \
+    } while (0)
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0)

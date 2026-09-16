@@ -457,27 +457,26 @@ static const struct dentry_operations ksu_file_wrapper_d_ops = { .d_dname = ksu_
 static struct vfsmount *anon_inode_mnt __read_mostly;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0)
-static struct file *alloc_file_pseudo(struct inode *inode, struct vfsmount *mnt,
-				      const char *name, int flags,
-				      const struct file_operations *fops)
+static struct file *alloc_file_pseudo(struct inode *inode, struct vfsmount *mnt, const char *name, int flags,
+                                      const struct file_operations *fops)
 {
-	struct qstr this = QSTR_INIT(name, strlen(name));
-	struct path path;
-	struct file *file;
+    struct qstr this = QSTR_INIT(name, strlen(name));
+    struct path path;
+    struct file *file;
 
-	path.dentry = d_alloc_pseudo(mnt->mnt_sb, &this);
-	if (!path.dentry)
-		return ERR_PTR(-ENOMEM);
-	path.mnt = mntget(mnt);
+    path.dentry = d_alloc_pseudo(mnt->mnt_sb, &this);
+    if (!path.dentry)
+        return ERR_PTR(-ENOMEM);
+    path.mnt = mntget(mnt);
 
-	d_instantiate(path.dentry, inode);
-	file = alloc_file(&path, OPEN_FMODE(flags), fops);
-	if (IS_ERR(file)) {
-		path_put(&path);
-		return file;
-	}
-	file->f_flags = flags;
-	return file;
+    d_instantiate(path.dentry, inode);
+    file = alloc_file(&path, OPEN_FMODE(flags), fops);
+    if (IS_ERR(file)) {
+        path_put(&path);
+        return file;
+    }
+    file->f_flags = flags;
+    return file;
 }
 #endif
 
