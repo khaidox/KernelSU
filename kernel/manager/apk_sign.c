@@ -364,11 +364,21 @@ bool is_manager_apk(char *path)
     }
 #endif
     if (check_v2_signature(path, EXPECTED_SIZE, EXPECTED_HASH)) {
+        pr_info("[KernelSU] Manager APK signature matched primary (0x%x)\n", EXPECTED_SIZE);
         return true;
     }
 #ifdef EXPECTED_SIZE2
-    return check_v2_signature(path, EXPECTED_SIZE2, EXPECTED_HASH2);
-#else
-    return false;
+    if (check_v2_signature(path, EXPECTED_SIZE2, EXPECTED_HASH2)) {
+        pr_info("[KernelSU] Manager APK signature matched secondary (0x%x)\n", EXPECTED_SIZE2);
+        return true;
+    }
 #endif
+#ifdef EXPECTED_SIZE3
+    if (check_v2_signature(path, EXPECTED_SIZE3, EXPECTED_HASH3)) {
+        pr_info("[KernelSU] Manager APK signature matched tertiary (0x%x)\n", EXPECTED_SIZE3);
+        return true;
+    }
+#endif
+    pr_warn("[KernelSU] Manager APK signature check failed for: %s\n", path);
+    return false;
 }
